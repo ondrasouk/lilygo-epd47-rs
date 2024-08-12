@@ -3,6 +3,7 @@ use core::ptr::addr_of_mut;
 use esp_hal::{
     clock::Clocks,
     dma,
+    dma_buffers,
     gpio::{GpioPin, Level, Output, OutputPin},
     lcd_cam::{lcd::i8080, LcdCam},
     peripheral::Peripheral,
@@ -11,9 +12,6 @@ use esp_hal::{
 };
 
 use crate::rmt;
-
-static mut TX_DESCRIPTORS: [dma::DmaDescriptor; 1] = [dma::DmaDescriptor::EMPTY; 1];
-static mut RX_DESCRIPTORS: [dma::DmaDescriptor; 0] = [dma::DmaDescriptor::EMPTY; 0];
 
 const DMA_BUFFER_SIZE: usize = 248;
 
@@ -156,14 +154,8 @@ impl<'a> ED047TC1<'a> {
 
         // configure dma
         let dma = dma::Dma::new(dma);
-        let channel = unsafe {
-            dma.channel0.configure(
-                false,
-                &mut *addr_of_mut!(TX_DESCRIPTORS),
-                &mut *addr_of_mut!(RX_DESCRIPTORS),
-                dma::DmaPriority::Priority0,
-            )
-        };
+        let channel = dma.channel0.configure(false, dma::DmaPriority::Priority0);
+        let (_, tx_descriptors, _, _) = dma_buffers!(4092, 0);
 
         // init lcd
         let lcd_cam = LcdCam::new(lcd_cam);
@@ -176,6 +168,7 @@ impl<'a> ED047TC1<'a> {
             i8080: i8080::I8080::new(
                 lcd_cam.lcd,
                 channel.tx,
+                tx_descriptors,
                 tx_pins,
                 10.MHz(),
                 i8080::Config {
